@@ -1,118 +1,113 @@
-use serenity::framework::standard::{
-    macros::{command, group},
-    CommandResult, StandardFramework,
+#![allow(deprecated)]
+mod commands;
+use crate::commands::{
+    deafen::*, join::*, leave::*, mute::*, queue::*, skip::*, stop::*, undeafen::*, unmute::*,
 };
-use serenity::model::prelude::*;
-use serenity::prelude::*;
-use songbird::SerenityInit;
-use std::{collections::HashMap, env, sync::Arc};
+use reqwest::Client as HttpClient;
+use serenity::{
+    async_trait,
+    client::{Client, Context, EventHandler},
+    framework::{
+        standard::{
+            macros::{command, group},
+            CommandResult, Configuration,
+        },
+        StandardFramework,
+    },
+    http::Http,
+    model::{channel::Message, gateway::Ready, prelude::ChannelId},
+    prelude::{GatewayIntents, TypeMapKey},
+    Result as SerenityResult,
+};
+use songbird::{Event, EventContext, EventHandler as VoiceEventHandler, SerenityInit};
+use std::{env, sync::Arc};
 
-#[group]
-#[commands(ping, join)]
-struct General;
+struct HttpKey;
+
+impl TypeMapKey for HttpKey {
+    type Value = HttpClient;
+}
 
 struct Handler;
 
-#[serenity::async_trait]
+#[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, ready: Ready) {
+    async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
-
-        for guild_id in ctx.cache.guilds() {
-            match guild_id.channels(&ctx).await {
-                Ok(channels) => {
-                    println!("Channels for Guild {}: ", guild_id);
-                    for (channel_id, channel) in channels {
-                        println!(
-                            "  - {} (ID: {}, Type: {:?})",
-                            channel.name, channel_id, channel.kind
-                        );
-                    }
-                }
-                Err(why) => {
-                    println!("Error fetching channels for guild {}: {:?}", guild_id, why);
-                }
-            }
-        }
     }
 }
+
+#[group]
+#[commands(deafen, join, leave, mute, queue, skip, stop, ping, undeafen, unmute)]
+struct General;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
-
-    let token = env::var("RDS").expect("Expected a token in the environment");
-
-    let framework = StandardFramework::new()
-        .configure(|c| c.prefix("!"))
-        .group(&GENERAL_GROUP);
-
-    let intents = GatewayIntents::non_privileged()
-        | GatewayIntents::MESSAGE_CONTENT
-        | GatewayIntents::GUILD_VOICE_STATES;
-
-    let mut client = Client::builder(&token, intents)
+    tracing_subscriber::fmt::init();
+    let token: String = env::var("RDS").expect("Expected a token in the environment");
+    let framework: StandardFramework = StandardFramework::new().group(&GENERAL_GROUP);
+    framework.configure(Configuration::new().prefix("~"));
+    let intents: GatewayIntents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
+    let mut client: Client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
         .register_songbird()
+        .type_map_insert::<HttpKey>(HttpClient::new())
         .await
-        .expect("Error creating client");
+        .expect("Err creating client");
+    let _ = client
+        .start()
+        .await
+        .map_err(|why: serenity::Error| println!("Client ended: {:?}", why));
 
-    if let Err(why) = client.start().await {
-        println!("An error occurred while running the client: {:?}", why);
-    }
-}
-
-#[command]
-#[only_in(guilds)]
-async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, "!pong").await?;
-    Ok(())
-}
-
-#[command]
-#[only_in(guilds)]
-async fn join(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild: GuildId = msg.guild_id.unwrap();
-    let channels: HashMap<ChannelId, GuildChannel> = guild.channels(ctx).await?;
-
-    if let Some(channel) = channels.values().find(|&channel| {
-        channel.kind == ChannelType::Voice && channel.name.to_lowercase().contains("general")
-    }) {
-        println!("Found voice channel: {} (ID: {})", channel.name, channel.id);
-
-        let manager: Arc<songbird::Songbird> = songbird::get(ctx)
+    tokio::spawn(async move {
+        let _ = client
+            .start()
             .await
-            .expect("Songbird client should be initialized");
+            .map_err(|why: serenity::Error| println!("Client ended: {:?}", why));
+    });
 
-        let (_, connection_result) = manager.join(guild, channel.id).await;
+    let _signal_err = tokio::signal::ctrl_c().await;
+    println!("Received Ctrl-C, shutting down.");
+}
 
-        match connection_result {
-            Ok(_) => {
-                msg.reply(ctx, format!("Joined voice channel #{}", channel.name))
-                    .await?;
-            }
-            Err(why) => {
-                msg.reply(ctx, format!("Failed to join voice channel: {}", why))
-                    .await?;
-            }
+async fn get_http_client(ctx: &Context) -> HttpClient {
+    let data = ctx.data.read().await;
+    data.get::<HttpKey>()
+        .cloned()
+        .expect("Guaranteed to exist in the typemap.")
+}
+
+struct TrackEndNotifier {
+    chan_id: ChannelId,
+    http: Arc<Http>,
+}
+
+#[async_trait]
+impl VoiceEventHandler for TrackEndNotifier {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(track_list) = ctx {
+            check_msg(
+                self.chan_id
+                    .say(&self.http, &format!("Tracks ended: {}.", track_list.len()))
+                    .await,
+            );
         }
-    } else {
-        let voice_channels: Vec<String> = channels
-            .values()
-            .filter(|channel| channel.kind == ChannelType::Voice)
-            .map(|channel| channel.name.clone())
-            .collect();
 
-        msg.reply(
-            ctx,
-            format!(
-                "Could not find a 'general' voice channel. Available voice channels: {}",
-                voice_channels.join(", ")
-            ),
-        )
-        .await?;
+        None
     }
+}
+
+#[command]
+async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
+    check_msg(msg.channel_id.say(&ctx.http, "Pong!").await);
 
     Ok(())
+}
+
+/// Checks that a message successfully sent; if not, then logs why to stdout.
+fn check_msg(result: SerenityResult<Message>) {
+    if let Err(why) = result {
+        println!("Error sending message: {:?}", why);
+    }
 }
