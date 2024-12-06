@@ -20,9 +20,9 @@ pub async fn get_presigned_url(url: &str) -> Result<String, CommandError> {
 
         if let Some(last_url) = urls.last() {
             println!("Extracted URL: {}", last_url);
-             Ok(last_url.to_string())
+            Ok(last_url.to_string())
         } else {
-             Err("No URL found".into())
+            Err("No URL found".into())
         }
     } else {
         let error_msg: &str = str::from_utf8(&output.stderr).unwrap_or("Unknown error");

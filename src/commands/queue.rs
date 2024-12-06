@@ -41,6 +41,49 @@ async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();
 
+    let is_youtube_playlist: bool = url.contains("list=");
+    let is_spotify_playlist: bool = url.contains("/playlist/");
+    let check_spotify_album: bool = url.contains("/album/");
+
+    if is_spotify_playlist {
+        check_msg(
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    "Spotify Playlists are not supported yet! Stay tuned :)",
+                )
+                .await,
+        );
+
+        return Ok(());
+    }
+
+    if check_spotify_album {
+        check_msg(
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    "Spotify albums are not supported yet! Stay tuned :)",
+                )
+                .await,
+        );
+
+        return Ok(());
+    }
+
+    if is_youtube_playlist {
+        check_msg(
+            msg.channel_id
+                .say(
+                    &ctx.http,
+                    "Youtube playlists are not supported yet! Stay tuned :)",
+                )
+                .await,
+        );
+
+        return Ok(());
+    }
+
     let check_spotify_url: bool = url.contains("spotify");
     if check_spotify_url {
         let url: Result<String, CommandError> = get_presigned_url(&url).await;

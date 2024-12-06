@@ -3,19 +3,21 @@ use serenity::all::{
     standard::{macros::command, Args, CommandResult},
     Context, Message,
 };
+use std::sync::Arc;
+use tokio::sync::MutexGuard;
 
 #[command]
 #[only_in(guilds)]
 async fn skip(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
+    let guild_id: serenity::model::prelude::GuildId = msg.guild_id.unwrap();
 
-    let manager = songbird::get(ctx)
+    let manager: Arc<songbird::Songbird> = songbird::get(ctx)
         .await
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();
 
     if let Some(handler_lock) = manager.get(guild_id) {
-        let handler = handler_lock.lock().await;
+        let handler: MutexGuard<'_, songbird::Call> = handler_lock.lock().await;
         let queue = handler.queue();
         let _ = queue.skip();
 
