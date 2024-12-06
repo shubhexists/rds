@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 mod commands;
+mod spotdl;
 use crate::commands::{
     deafen::*, join::*, leave::*, mute::*, queue::*, skip::*, stop::*, undeafen::*, unmute::*,
 };
@@ -46,8 +47,9 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let token: String = env::var("RDS").expect("Expected a token in the environment");
     let framework: StandardFramework = StandardFramework::new().group(&GENERAL_GROUP);
-    framework.configure(Configuration::new().prefix("~"));
-    let intents: GatewayIntents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
+    framework.configure(Configuration::new().prefix("!"));
+    let intents: GatewayIntents =
+        GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let mut client: Client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
@@ -105,7 +107,6 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-/// Checks that a message successfully sent; if not, then logs why to stdout.
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
         println!("Error sending message: {:?}", why);

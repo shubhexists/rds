@@ -3,13 +3,14 @@ use serenity::all::{
     standard::{macros::command, CommandResult},
     Context, Message,
 };
+use std::sync::Arc;
 
 #[command]
 #[only_in(guilds)]
 async fn undeafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
+    let guild_id: serenity::model::prelude::GuildId = msg.guild_id.unwrap();
 
-    let manager = songbird::get(ctx)
+    let manager: Arc<songbird::Songbird> = songbird::get(ctx)
         .await
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();

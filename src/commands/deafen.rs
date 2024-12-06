@@ -4,6 +4,7 @@ use serenity::all::{
     Context, Message,
 };
 use std::sync::Arc;
+use tokio::sync::MutexGuard;
 
 #[command]
 async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
@@ -23,7 +24,7 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
         }
     };
 
-    let mut handler = handler_lock.lock().await;
+    let mut handler: MutexGuard<'_, songbird::Call> = handler_lock.lock().await;
 
     if handler.is_deaf() {
         check_msg(msg.channel_id.say(&ctx.http, "Already deafened").await);
