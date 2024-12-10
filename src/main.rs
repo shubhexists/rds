@@ -2,7 +2,7 @@
 mod commands;
 mod spotdl;
 use crate::commands::{
-    deafen::*, join::*, leave::*, mute::*, queue::*, skip::*, stop::*, undeafen::*, unmute::*,
+    deafen::*, join::*, leave::*, mute::*, queue::*, skip::*, stop::*, undeafen::*, unmute::*,repeat::*
 };
 use reqwest::Client as HttpClient;
 use serenity::{
@@ -39,7 +39,9 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(deafen, join, leave, mute, queue, skip, stop, ping, undeafen, unmute)]
+#[commands(
+    deafen, join, leave, mute, queue, skip, stop, ping, undeafen, unmute, repeat
+)]
 struct General;
 
 #[tokio::main]
